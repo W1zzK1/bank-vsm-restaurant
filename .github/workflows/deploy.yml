@@ -1,6 +1,5 @@
 name: Deploy Go App to Raspberry Pi
 
-# Триггер: запускать при пуше в ветку 'main'
 on:
   push:
     branches:
@@ -8,38 +7,32 @@ on:
 
 jobs:
   build-and-deploy:
-    # Запускать на стандартном виртуальном окружении GitHub
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Скачиваем код из репозитория
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. Устанавливаем Go нужной версии
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.25.1' # Укажите вашу версию Go
+          # ИСПРАВЛЕНО: Установлена актуальная стабильная версия Go
+          go-version: '1.22'
 
-      # 3. Кросс-компиляция под архитектуру Raspberry Pi
-      # GOARCH=arm64 для 64-битных систем (Pi 3/4/5)
-      # GOARCH=arm для 32-битных систем (Pi 2/Zero)
       - name: Build for Raspberry Pi
         run: GOOS=linux GOARCH=arm64 go build -o bank-api ./app
 
-      # 4. Копируем скомпилированный файл на Raspberry Pi
       - name: Deploy to Raspberry Pi
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.PI_HOST }}
           username: ${{ secrets.PI_USERNAME }}
           key: ${{ secrets.PI_SSH_KEY }}
-          source: "bank-api" # Какой файл копируем
-          target: "/home/deployer/apps/bank-vsm-restautant" # Куда копируем
+          source: "bank-api"
+          # ИСПРАВЛЕНО: Указываем новый путь для копирования
+          target: "/apps/bank-vsm-restaurant"
 
-      # 5. Перезапускаем сервис на Raspberry Pi по SSH
-      - name: Restart service
+      - name: Restart service on Raspberry Pi
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.PI_HOST }}

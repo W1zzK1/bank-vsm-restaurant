@@ -3,7 +3,7 @@ name: Deploy Go App to Raspberry Pi
 on:
   push:
     branches:
-      - main
+      - master
 
 jobs:
   build-and-deploy:

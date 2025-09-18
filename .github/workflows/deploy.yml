@@ -16,8 +16,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          # ИСПРАВЛЕНО: Установлена актуальная стабильная версия Go
-          go-version: '1.22'
+          go-version: '1.25.1'
+
+      # --- НОВЫЙ ШАГ: Подключение к  VPN-сети Tailscale ---
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
 
       - name: Build for Raspberry Pi
         run: GOOS=linux GOARCH=arm64 go build -o bank-api ./app
@@ -29,7 +34,6 @@ jobs:
           username: ${{ secrets.PI_USERNAME }}
           key: ${{ secrets.PI_SSH_KEY }}
           source: "bank-api"
-          # ИСПРАВЛЕНО: Указываем новый путь для копирования
           target: "/apps/bank-vsm-restaurant"
 
       - name: Restart service on Raspberry Pi

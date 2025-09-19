@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Подтверждение платежа</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f7f7f7; }
+        .container { padding: 30px; border: 1px solid #ccc; border-radius: 8px; background-color: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { margin-top: 0; }
+        table { border-collapse: collapse; margin-bottom: 20px; width: 100%; }
+        th, td { padding: 12px; text-align: left; }
+        th { font-weight: bold; }
+        input[type="text"] { padding: 8px; border: 1px solid #ccc; border-radius: 4px; background-color: #eee; }
+        .buttons { display: flex; justify-content: space-between; }
+        input[type="submit"], button { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        input[type="submit"] { background-color: #28a745; color: white; }
+        button { background-color: #dc3545; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Подтверждение платежа</h1>
+        <p>Пожалуйста, проверьте данные и перейдите к оплате.</p>
+
+        <form method="POST" action="http://localhost:8181/api/v1/payment">
+            
+            <!-- ИСПРАВЛЕНО: Добавлены URL для возврата пользователя -->
+            <!-- Важно: используйте полные URL, включая ваш домен -->
+            <input type="hidden" name="success_url" value="http://localhost:8181/payment/success">
+            <input type="hidden" name="fail_url" value="http://localhost:8181/payment/fail">
+
+            <table>
+                <tr>
+                    <th>Сумма:</th>
+                    <td>
+                        <input type="text" name="sum" value="{{.Payment.Amount}}" readonly>
+                        <span>Рублей</span>
+                    </td>
+                </tr>
+                <tr>
+                    <th>Номер заказа:</th>
+                    <td>
+                        <input type="text" name="orderid" value="{{.Payment.OrderID}}" readonly>
+                    </td>
+                </tr>
+            </table>
+
+            <div class="buttons">
+                <button type="button" onclick="history.back()">Отмена</button>
+                <input type="submit" value="Оплатить">
+            </div>
+        </form>
+    </div>
+</body>
+</html>

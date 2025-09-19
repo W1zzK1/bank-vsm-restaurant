@@ -1,104 +1,88 @@
 package payment
 
 import (
-	"errors"
 	"encoding/json"
-	"strings"
 	"log"
 	"net/http"
+	"html/template"
 )
 
-type CardData struct {
-	CardNumber string `json:"card_number"`
-	ExpMonth   int    `json:"exp_month"`
-	ExpYear    int    `json:"exp_year"`
-	CVV        string `json:"cvv"`
-}
 
 type Payment struct {
-	OrderID        string            `json:"order_id"`
-	Amount         float32           `json:"amount"`
-	Currency       string            `json:"currency"`
-	Description    string            `json:"description"`
-	Card           CardData          `json:"card_data"`
-	Metadata       map[string]string `json:"metadata"`
-	IPAddress      string            `json:"ip_address"`
-	IdempotencyKey string            `json:"idempotency_key"` /*
-	это уникальный идентификатор, генерируемый клиентом и передаваемый в запросе на сервер.
-	Он позволяет серверу распознавать повторные запросы и выполнять операцию только 
-	один раз, предотвращая дублирование и нежелательные побочные эффекты, например, 
-	двойное списание средств. 
-	*/
+	OrderID  string   `json:"order_id"`
+	Amount   float64  `json:"amount"`
 }
 
-func (p *Payment) Validate() error {
-	if p.OrderID == "" {
-		return errors.New("order_id is required")
-	}
-	if p.Amount <= 0 {
-		return errors.New("amount must be a positive value")
-	}
-	if p.Currency == "" {
-		return errors.New("currency is required")
-	}
-	if p.Card.CardNumber == "" {
-		return errors.New("card_number is required")
-	}
-	// Здесь можно добавить больше проверок: формат CVV, срок действия карты и т.д.
-	return nil
+type PageData struct {
+	Payment Payment
 }
 
-func (p *Payment) Authorize() bool {
-	// Очищаем номер карты от пробелов для удобства сравнения.
-	cardNumber := strings.ReplaceAll(p.Card.CardNumber, " ", "")
+func PaymentHandlerWithHTML(w http.ResponseWriter, r *http.Request) {
+	// 1. Проверяем, что это POST-запрос
+	if r.Method != http.MethodPost {
+		http.Error(w, "Invalid request method. Only POST is allowed.", http.StatusMethodNotAllowed)
+		return
+	}
 
-	switch cardNumber {
-	case "4242424242424242":
-		// Это стандартная тестовая карта для успешных платежей.
-		return true
-	case "4000000000000002":
-		// Тестовая карта для получения отказа.
-		return false
-	default:
-		// Для всех остальных карт в этом примере возвращаем отказ.
-		return false
+	// 2. Декодируем JSON из тела запроса
+	var req Payment
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "Error decoding request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// 3. Парсим наш HTML-шаблон
+	tmpl, err := template.ParseFiles("web/payment.html")
+	if err != nil {
+		http.Error(w, "Could not parse template: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 4. Создаем данные для передачи в шаблон
+	data := PageData{
+		Payment: req,
+	}
+
+	// 5. "Исполняем" шаблон: вставляем данные `data` в шаблон `tmpl`
+	// и отправляем результат пользователю `w`.
+	err = tmpl.Execute(w, data)
+	if err != nil {
+		http.Error(w, "Could not execute template: "+err.Error(), http.StatusInternalServerError)
 	}
 }
 
-func PaymentHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Request received for: %s from %s", r.URL.Path, r.RemoteAddr)
-
-	// Принимаем только POST запросы
+// PaykeeperWebhookHandler принимает серверные уведомления от Paykeeper.
+func PaykeeperWebhookHandler(w http.ResponseWriter, r *http.Request) {
+	// 1. Вебхуки всегда приходят методом POST
 	if r.Method != http.MethodPost {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Декодируем JSON из тела запроса в нашу структуру Payment
-	var p Payment
-	err := json.NewDecoder(r.Body).Decode(&p)
-	if err != nil {
-		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+	// 2. Paykeeper отправляет данные в формате x-www-form-urlencoded, а не JSON
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Cannot parse form", http.StatusBadRequest)
 		return
 	}
 
-	// 1. Валидация данных
-	if err := p.Validate(); err != nil {
-		log.Printf("Validation failed for order %s: %v", p.OrderID, err)
-		http.Error(w, err.Error(), http.StatusBadRequest) // 400 Bad Request
-		return
+	// 3. Получаем ключевые поля из формы
+	orderID := r.FormValue("orderid")
+	status := r.FormValue("status") // "paid" или "failed"
+
+	log.Printf("Webhook received for order %s with status '%s'", orderID, status)
+
+	// 5. Обновляем статус заказа в вашей базе данных
+	if status == "paid" {
+		log.Printf("SUCCESS: Order %s is paid.", orderID)
+		// db.UpdateOrderStatus(orderID, "paid")
+	} else {
+		log.Printf("FAILURE: Order %s is not paid (status: %s).", orderID, status)
+		// db.UpdateOrderStatus(orderID, "failed")
 	}
 
-	// 2. Авторизация платежа
-	if !p.Authorize() {
-		log.Printf("Authorization declined for order %s (card: ...%s)", p.OrderID, p.Card.CardNumber[len(p.Card.CardNumber)-4:])
-		http.Error(w, "Payment declined", http.StatusPaymentRequired) // 402 Payment Required
-		return
-	}
-
-	// Если все успешно
-	log.Printf("Payment successful for order %s", p.OrderID)
-	w.WriteHeader(http.StatusOK) // 200 OK
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "success", "order_id": p.OrderID})
+	// 6. Отвечаем Paykeeper, что мы получили вебхук.
+	// Если не ответить 200 OK, он будет пытаться отправить его снова.
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
 }
